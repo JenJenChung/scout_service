@@ -1,0 +1,34 @@
+footprint: '[[0.05,0.05],[0.05,-0.05],[-0.05,-0.05],[-0.05,0.05]]'
+robot_radius: 0.05
+footprint_padding: 0.0
+global_frame: odom
+robot_base_frame: base_link
+
+static_map: false
+height: 2
+width: 2
+resolution: 0.05
+origin_x: 0.0
+origin_y: 0.0
+
+transform_tolerance: 0.5
+publish_frequency: 5.0
+update_frequency: 5.0
+
+plugins:
+- {name: static_layer, type: 'costmap_2d::StaticLayer'}
+- {name: obstacle_layer, type: 'costmap_2d::ObstacleLayer'}
+- {name: inflation_layer, type: 'costmap_2d::InflationLayer'}
+
+inflation_layer: {cost_scaling_factor: 5.0, enabled: true, inflation_radius: 0.0}
+obstacle_layer:
+  combination_method: 1
+  enabled: true
+  footprint_clearing_enabled: true
+  laser_scan_sensor: {clearing: true, data_type: LaserScan, expected_update_rate: 0.4,
+    marking: true, sensor_frame: laser, topic: base_scan}
+  max_obstacle_height: 2.0
+  observation_sources: laser_scan_sensor
+  obstacle_range: 2.0
+  raytrace_range: 2.0
+#static_layer: {enabled: true}

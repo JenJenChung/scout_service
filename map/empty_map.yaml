@@ -1,0 +1,7 @@
+cell_map:
+  rows: 30
+  columns: 35
+  resolution: 1.00000
+  cell_offset:
+    x: 5
+    y: 13

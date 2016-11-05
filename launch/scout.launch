@@ -1,0 +1,14 @@
+<launch>
+  <arg name="robot_name"/>
+  
+  <rosparam file="$(find scout_service)/scout_service_sim_params.yaml" command="load"/>
+  
+  <node pkg="scout_service" type="scout_robot" respawn="false" name="scout_robot" output="screen">
+    <param name="rover_name" value="$(arg robot_name)" />
+<!--    <rosparam file="$(find frontier_waypoint)/frontier_waypoint_params.yaml" command="load"/>-->
+  </node>
+  <node pkg="scout_service" type="scout_map" respawn="false" name="scout_map" output="screen">
+<!--    <rosparam file="$(find pioneer_2dnav)/costmap_common_params.yaml" command="load"/>-->
+    <rosparam file="$(find scout_service)/scout_costmap_params.yaml" command="load" ns="scout_map"/>
+  </node>
+</launch>
