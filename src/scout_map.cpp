@@ -3,6 +3,7 @@
 #include <costmap_2d/costmap_2d_ros.h>
 #include <iostream>
 #include "ScoutCostmap.h"
+#include <ros/console.h>
 
 int main(int argc, char** argv){
 

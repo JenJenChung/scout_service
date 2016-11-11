@@ -46,3 +46,11 @@ add_dependencies(scout_map ${catkin_EXPORTED_TARGETS})
 add_executable(scout_robot src/scout_robot.cpp)
 target_link_libraries(scout_robot ${catkin_LIBRARIES})
 add_dependencies(scout_robot ${catkin_EXPORTED_TARGETS})
+
+add_executable(rover_list_manager src/rover_list_manager.cpp)
+target_link_libraries(rover_list_manager ${catkin_LIBRARIES})
+add_dependencies(rover_list_manager ${catkin_EXPORTED_TARGETS})
+
+add_executable(service_robot src/service_robot.cpp)
+target_link_libraries(service_robot ${catkin_LIBRARIES})
+add_dependencies(service_robot ${catkin_EXPORTED_TARGETS})

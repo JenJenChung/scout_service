@@ -1,0 +1,3 @@
+<launch>
+  <node pkg="scout_service" type="rover_list_manager" respawn="false" name="rover_list_manager" output="screen"/>
+</launch>

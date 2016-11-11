@@ -1,10 +1,12 @@
 #include <ros/ros.h>
+#include <ros/console.h>
 #include <string>
 #include <vector>
 #include "geometry_msgs/PoseWithCovarianceStamped.h"
 #include "geometry_msgs/Twist.h"
 #include "scout_service/RoverPosition.h"
 #include "scout_service/RoverList.h"
+#include "scout_service/POIVector.h"
 #include <move_base_msgs/MoveBaseActionResult.h>
 #include <math.h>
 
@@ -14,17 +16,19 @@ using std::vector ;
 
 typedef unsigned int UINT ;
 
-class Scout{
+class Service{
   public:
-    Scout(ros::NodeHandle) ;
-    ~Scout(){}
+    Service(ros::NodeHandle) ;
+    ~Service(){}
   private:
     ros::Subscriber subResult ;
     ros::Subscriber subAMCLPose ;
     ros::Subscriber subScout ;
     ros::Subscriber subService ;
-    ros::Publisher pubScoutPosition ;
+    ros::Subscriber subPOIs ;
+    ros::Publisher pubServicePosition ;
     ros::Publisher pubWaypoint ;
+    ros::Publisher pubServicedPOIs ;
     
     scout_service::RoverPosition pos ;
     
@@ -46,21 +50,26 @@ class Scout{
     UINT CalculateSector(double, double) ;
     double CalculateDistance(double, double) ;
     void SendNewWaypoint() ;
+    void RecalculatePOIStates() ;
+    void CheckIfServiced() ;
     
     void amclPoseCallback(const geometry_msgs::PoseWithCovarianceStamped&) ;
     void scoutCallback(const scout_service::RoverList&) ;
     void serviceCallback(const scout_service::RoverList&) ;
+    void poiCallback(const scout_service::POIVector&) ;
     void waypointCallback(const move_base_msgs::MoveBaseActionResult&) ;
 } ;
 
-Scout::Scout(ros::NodeHandle nh){
-  ROS_INFO("Initialising scout parameters...") ;
-  subResult = nh.subscribe("move_base/result", 10, &Scout::waypointCallback, this) ;
-  subAMCLPose = nh.subscribe("amcl_pose", 10, &Scout::amclPoseCallback, this) ;
-  subScout = nh.subscribe("/scout_list", 10, &Scout::scoutCallback, this) ;
-  subService = nh.subscribe("/service_list", 10, &Scout::serviceCallback, this) ;
-  pubScoutPosition = nh.advertise<scout_service::RoverPosition>("scout_position", 10) ;
+Service::Service(ros::NodeHandle nh){
+  ROS_INFO("Initialising service parameters...") ;
+  subResult = nh.subscribe("move_base/result", 10, &Service::waypointCallback, this) ;
+  subAMCLPose = nh.subscribe("amcl_pose", 10, &Service::amclPoseCallback, this) ;
+  subScout = nh.subscribe("/scout_list", 10, &Service::scoutCallback, this) ;
+  subService = nh.subscribe("/service_list", 10, &Service::serviceCallback, this) ;
+  subPOIs = nh.subscribe("/known_POIs", 10, &Service::poiCallback, this) ;
+  pubServicePosition = nh.advertise<scout_service::RoverPosition>("scout_position", 10) ;
   pubWaypoint = nh.advertise<geometry_msgs::Twist>("map_goal", 10) ;
+  pubServicedPOIs = nh.advertise<scout_service::POIVector>("serviced_POIs", 10, true) ;
   
   // Initialise from parameter list
   ros::param::get("rover_name",rover_name) ;
@@ -69,54 +78,36 @@ Scout::Scout(ros::NodeHandle nh){
   ros::param::get("/total_services",totalServices) ;
   ros::param::get("/world_size",worldSize) ; // normalisation factor for distances
   ros::param::get("/total_POIs",totalPOIs) ;
-  ros::param::get("/poi_locations/x",poiX) ;
-  ros::param::get("/poi_locations/y",poiY) ;
+  poiX.clear() ;
+  poiY.clear() ;
 
   isResult = false ;
   isScout = false ;
   isService = false ;
   
-  ROS_INFO("***** Scout initialisation complete! *****") ;
+  ROS_INFO("***** Service initialisation complete! *****") ;
 }
 
-void Scout::amclPoseCallback(const geometry_msgs::PoseWithCovarianceStamped& msg){ // publish your own current position
+void Service::amclPoseCallback(const geometry_msgs::PoseWithCovarianceStamped& msg){ // publish your own current position
   pos.header = msg.header ;
   pos.x = msg.pose.pose.position.x ;
   pos.y = msg.pose.pose.position.y ;
   pos.z = msg.pose.pose.position.z ;
   
-  pubScoutPosition.publish(pos) ;
+  pubServicePosition.publish(pos) ;
   
-  // Recalculate POI state inputs
-  vector<double> p(16,0.0) ;
-  poi_states = p ;
-  for (UINT i = 0; i < poiX.size(); i++){
-    UINT s = CalculateSector(poiX[i],poiY[i]) ;
-    double d = CalculateDistance(poiX[i],poiY[i]) ;
-    poi_states[2*s] += 1.0 ; // increment total number of scouts in sector
-    poi_states[2*s+1] += d ; // increment total distances to other scouts in sector
-  }
-  
-  // Normalise states
-  for (UINT i = 0; i < poi_states.size(); i++){
-    if (i%2 == 0)
-      poi_states[i] /= totalPOIs ;
-    else
-      poi_states[i] /= worldSize ;
-  }
+  RecalculatePOIStates() ;
 }
 
-void Scout::scoutCallback(const scout_service::RoverList& msg){
+void Service::scoutCallback(const scout_service::RoverList& msg){
   // Reset scout states to 0
   vector<double> ss(16,0.0) ;
   scout_states = ss ;
   for (UINT i = 0; i < msg.rover_names.size(); i++){
-    if (rover_name.compare(msg.rover_names[i]) != 0){ // different scout to yourself
-      UINT s = CalculateSector(msg.x[i],msg.y[i]) ;
-      double d = CalculateDistance(msg.x[i],msg.y[i]) ;
-      scout_states[2*s] += 1.0 ; // increment total number of scouts in sector
-      scout_states[2*s+1] += d ; // increment total distances to other scouts in sector
-    }
+    UINT s = CalculateSector(msg.x[i],msg.y[i]) ;
+    double d = CalculateDistance(msg.x[i],msg.y[i]) ;
+    scout_states[2*s] += 1.0 ; // increment total number of scouts in sector
+    scout_states[2*s+1] += d ; // increment total distances to other scouts in sector
   }
   
   // Normalise states
@@ -131,15 +122,17 @@ void Scout::scoutCallback(const scout_service::RoverList& msg){
   SendNewWaypoint() ;
 }
 
-void Scout::serviceCallback(const scout_service::RoverList& msg){
+void Service::serviceCallback(const scout_service::RoverList& msg){
   // Reset service states to 0
   vector<double> ss(16,0.0) ;
   service_states = ss ;
   for (UINT i = 0; i < msg.rover_names.size(); i++){
-    UINT s = CalculateSector(msg.x[i],msg.y[i]) ;
-    double d = CalculateDistance(msg.x[i],msg.y[i]) ;
-    service_states[2*s] += 1.0 ; // increment total number of services in sector
-    service_states[2*s+1] += d ; // increment total distances to other services in sector
+    if (rover_name.compare(msg.rover_names[i]) != 0){ // different service to yourself
+      UINT s = CalculateSector(msg.x[i],msg.y[i]) ;
+      double d = CalculateDistance(msg.x[i],msg.y[i]) ;
+      service_states[2*s] += 1.0 ; // increment total number of services in sector
+      service_states[2*s+1] += d ; // increment total distances to other services in sector
+    }
   }
   
   // Normalise states
@@ -153,12 +146,24 @@ void Scout::serviceCallback(const scout_service::RoverList& msg){
   SendNewWaypoint() ;
 }
 
-void Scout::waypointCallback(const move_base_msgs::MoveBaseActionResult& msg){
+void Service::poiCallback(const scout_service::POIVector& msg){
+  poiX.clear() ;
+  poiY.clear() ;
+  
+  for (UINT i = 0; i < msg.num_pois; i++){
+    poiX.push_back(msg.x[i]) ;
+    poiY.push_back(msg.y[i]) ;
+  }
+  
+  RecalculatePOIStates() ;
+}
+
+void Service::waypointCallback(const move_base_msgs::MoveBaseActionResult& msg){
   isResult = true ;
   SendNewWaypoint() ;
 }
 
-void Scout::SendNewWaypoint(){
+void Service::SendNewWaypoint(){
   if (isScout && isService && isResult){
     // Concatenate control policy state
     full_state.clear() ;
@@ -174,8 +179,8 @@ void Scout::SendNewWaypoint(){
     // compute new waypoint from control policy
     geometry_msgs::Twist waypoint ;
     // apply control policy here
-    waypoint.linear.x = 20.0 ;
-    waypoint.linear.y = 20.0 ;
+    waypoint.linear.x = 1.0 ;
+    waypoint.linear.y = 1.0 ;
     waypoint.linear.z = 0.0 ;
     waypoint.angular.x = 0.0 ;
     waypoint.angular.y = 0.0 ;
@@ -189,7 +194,7 @@ void Scout::SendNewWaypoint(){
   }
 }
 
-UINT Scout::CalculateSector(double x, double y){
+UINT Service::CalculateSector(double x, double y){
   double diffy = y - pos.y ;
   double diffx = x - pos.x ;
   double a = atan2(diffy,diffx) * 180.0/PI ; // angle is from standard x axis definition
@@ -216,9 +221,48 @@ UINT Scout::CalculateSector(double x, double y){
   return s ;
 }
 
-double Scout::CalculateDistance(double x, double y){
+double Service::CalculateDistance(double x, double y){
   double diffy = y - pos.y ;
   double diffx = x - pos.x ;
   double dist = sqrt(diffx*diffx + diffy*diffy) ;
   return dist ;
+}
+
+void Service::RecalculatePOIStates(){
+  // Recalculate POI state inputs
+  vector<double> p(16,0.0) ;
+  poi_states = p ;
+  for (UINT i = 0; i < poiX.size(); i++){
+    UINT s = CalculateSector(poiX[i],poiY[i]) ;
+    double d = CalculateDistance(poiX[i],poiY[i]) ;
+    poi_states[2*s] += 1.0 ; // increment total number of scouts in sector
+    poi_states[2*s+1] += d ; // increment total distances to other scouts in sector
+  }
+  
+  // Normalise states
+  for (UINT i = 0; i < poi_states.size(); i++){
+    if (i%2 == 0)
+      poi_states[i] /= totalPOIs ;
+    else
+      poi_states[i] /= worldSize ;
+  }
+  
+  CheckIfServiced() ;
+}
+
+void Service::CheckIfServiced(){
+  bool poisServiced = false ;
+  scout_service::POIVector sPOIs ;
+  sPOIs.num_pois = 0 ;
+  for (UINT i = 0; i < poiX.size(); i++){
+    if (fabs(poiX[i]-pos.x) <= 1.5 && fabs(poiY[i]-pos.y) <= 1.5){
+      ROS_INFO("Servicing a POI") ;
+      poisServiced = true ;
+      sPOIs.num_pois++ ;
+      sPOIs.x.push_back(poiX[i]) ;
+      sPOIs.y.push_back(poiY[i]) ;
+    }
+  }
+  if (poisServiced)
+    pubServicedPOIs.publish(sPOIs) ;
 }

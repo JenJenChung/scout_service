@@ -1,0 +1,3 @@
+<launch>
+  <rosparam file="$(find scout_service)/scout_service_sim_params.yaml" command="load"/>
+</launch>

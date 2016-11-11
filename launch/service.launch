@@ -1,0 +1,8 @@
+<launch>
+  <arg name="robot_name"/>
+  
+  <param name="rover_name" value="$(arg robot_name)" />
+  
+  <node pkg="scout_service" type="service_robot" respawn="false" name="service_robot" output="screen"/>
+  
+</launch>

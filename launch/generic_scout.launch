@@ -1,0 +1,10 @@
+<launch>
+  <arg name="robot_name"/>
+  
+  <!-- Make sure initial pose matches $(find pioneer_description)/launch/pioneers.launch arg init_pose -->
+  <group ns="$(arg robot_name)">
+    <include file="$(find scout_service)/launch/scout.launch">
+      <arg name="robot_name" value="$(arg robot_name)" />
+    </include>
+  </group>
+</launch>

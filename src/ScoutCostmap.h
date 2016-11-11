@@ -3,6 +3,8 @@
 #include <map_msgs/OccupancyGridUpdate.h>
 #include "scout_service/POIVector.h"
 #include <ros/console.h>
+#include <math.h>
+#include <vector>
 
 #include "Grid.h"
 
@@ -23,6 +25,8 @@ class ScoutCostmap
     UINT y_max ;
     scout_service::POIVector POIList ;
     unsigned char cellCostThreshold ;
+    vector<int> poiX ;
+    vector<int> poiY ;
     
     Grid POIMap ;
     
@@ -30,15 +34,20 @@ class ScoutCostmap
 } ;
 
 ScoutCostmap::ScoutCostmap(ros::NodeHandle nh, costmap_2d::Costmap2DROS *cm_ros_): costmap_ros_(cm_ros_), cellCostThreshold(50){
-  ROS_INFO("Initialising scout field of view...") ;
-  subCostmapUpdate = nh.subscribe("scout_map/costmap_updates", 10, &ScoutCostmap::mapUpdateCallback, this) ;
-  pubPOIList = nh.advertise<scout_service::POIVector>("discovered_POIs", 10) ;
+  ROS_INFO("Initialising scout map object...") ;
+  subCostmapUpdate = nh.subscribe("scout_map/scout_map/costmap_updates", 10, &ScoutCostmap::mapUpdateCallback, this) ;
+  pubPOIList = nh.advertise<scout_service::POIVector>("discovered_POIs", 10, true) ;
 
   costmap_2d::Costmap2D *costmap_ = costmap_ros_->getCostmap() ;
   x_max = costmap_->getSizeInCellsX() ;
   y_max = costmap_->getSizeInCellsY() ;
   
   POIList.num_pois = 0 ;
+  pubPOIList.publish(POIList) ;
+  
+  ros::param::get("/poi_locations/x",poiX) ;
+  ros::param::get("/poi_locations/y",poiY) ;
+  ROS_INFO("***** Scout map initialisation complete! *****") ;
 }
 
 void ScoutCostmap::mapUpdateCallback(const map_msgs::OccupancyGridUpdate&){
@@ -51,16 +60,27 @@ void ScoutCostmap::mapUpdateCallback(const map_msgs::OccupancyGridUpdate&){
     for (UINT j = 0; j < y_max; j++){
       if (costmap_->getCost(i,j) > cellCostThreshold){
         costmap_->mapToWorld(i,j,wx,wy) ;
-        if (!POIMap.IsPOIDetected(wx,wy)){ // new POI detected
+        // Cross-reference with known POI locations to avoid labelling other robots as POIs
+        bool isPOI = false ;
+        for (UINT k = 0; k < poiX.size(); k++){
+          if ((int)round(wx) == poiX[k] && (int)round(wy) == poiY[k]){
+            isPOI = true ;
+            break ;
+          }
+        }
+//        if (!isPOI)
+//          ROS_INFO_STREAM("(" << round(wx) << "," << round(wy) << ") is not a POI") ;
+        if (isPOI && !POIMap.IsPOIDetected(wx,wy)){ // new POI detected
           POIMap.UpdateCell(wx,wy) ;
           POIList.num_pois++ ;
-          POIList.x.push_back(wx) ;
-          POIList.y.push_back(wy) ;
+          POIList.x.push_back(round(wx)) ;
+          POIList.y.push_back(round(wy)) ;
           repubPOIs = true ;
         }
       }
     }
   }
   
-  pubPOIList.publish(POIList) ; // announce POI list change
+  if (repubPOIs)
+    pubPOIList.publish(POIList) ; // announce POI list change
 }
