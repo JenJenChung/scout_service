@@ -5,8 +5,10 @@
 #include "scout_service/RoverPosition.h"
 #include "scout_service/RoverList.h"
 #include "scout_service/POIVector.h"
+#include <vector>
 
 typedef unsigned int UINT ;
+using std::vector ;
 
 class RoverListManager{
   public:
@@ -23,6 +25,7 @@ class RoverListManager{
     ros::Publisher pubServiceList ;
     ros::Publisher pubPOIList ;
     ros::Publisher pubPOIMarkers ;
+    ros::Publisher pubScoutPOIMarkers ;
     ros::Publisher pubServicePOIMarkers ;
     
     void scoutACallback(const scout_service::RoverPosition&) ;
@@ -35,6 +38,7 @@ class RoverListManager{
     scout_service::RoverList services ;
     scout_service::POIVector POIList ;
     scout_service::POIVector servicePOIList ;
+    visualization_msgs::Marker allPOIs ;
     visualization_msgs::Marker scoutPOIs ;
     visualization_msgs::Marker servicePOIs ;
     
@@ -53,7 +57,8 @@ RoverListManager::RoverListManager(ros::NodeHandle nh){
   pubScoutList = nh.advertise<scout_service::RoverList>("/scout_list", 10, true) ;
   pubServiceList = nh.advertise<scout_service::RoverList>("/service_list", 10, true) ;
   pubPOIList = nh.advertise<scout_service::POIVector>("/known_POIs", 10, true) ;
-  pubPOIMarkers = nh.advertise<visualization_msgs::Marker>("/scout_POIs", 10, true) ;
+  pubPOIMarkers = nh.advertise<visualization_msgs::Marker>("/all_POIs", 10, true) ;
+  pubScoutPOIMarkers = nh.advertise<visualization_msgs::Marker>("/scout_POIs", 10, true) ;
   pubServicePOIMarkers = nh.advertise<visualization_msgs::Marker>("/service_POIs", 10, true) ;
   POIList.num_pois = 0 ;
   pubPOIList.publish(POIList) ;
@@ -78,6 +83,33 @@ RoverListManager::RoverListManager(ros::NodeHandle nh){
   ros::param::get("/pioneer3/y",y) ;
   services.x.push_back(x) ;
   services.y.push_back(y) ;
+  
+  allPOIs.header.seq = 0 ;
+  allPOIs.header.stamp = ros::Time::now() ;
+  allPOIs.header.frame_id = "/map" ;
+  allPOIs.type = 7 ;
+  allPOIs.scale.x = 0.2 ;
+  allPOIs.scale.y = 0.2 ;
+  allPOIs.scale.z = 0.2 ;
+  allPOIs.color.r = 0.0 ;
+  allPOIs.color.g = 1.0 ;
+  allPOIs.color.b = 0.0 ;
+  allPOIs.color.a = 1.0 ;
+  
+  vector<double> poiX ;
+  vector<double> poiY ;
+  ros::param::get("/poi_locations/x",poiX) ;
+  ros::param::get("/poi_locations/y",poiY) ;
+  
+  for (UINT i = 0; i < poiX.size(); i++){
+    geometry_msgs::Point p ;
+    p.x = poiX[i] ;
+    p.y = poiY[i] ;
+    p.z = 0.0 ;
+    allPOIs.points.push_back(p) ;
+  }
+  
+  pubPOIMarkers.publish(allPOIs) ;
   
   scoutPOIs.header.seq = 0 ;
   scoutPOIs.header.stamp = ros::Time::now() ;
@@ -146,7 +178,7 @@ void RoverListManager::POICallback(const scout_service::POIVector& msg){
   }
   if (repubPOIs){
     pubPOIList.publish(POIList) ;
-    pubPOIMarkers.publish(scoutPOIs) ;
+    pubScoutPOIMarkers.publish(scoutPOIs) ;
   }
 }
 

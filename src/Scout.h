@@ -1,10 +1,12 @@
 #include <ros/ros.h>
 #include <string>
 #include <vector>
+#include "std_msgs/Int8.h"
 #include "geometry_msgs/PoseWithCovarianceStamped.h"
 #include "geometry_msgs/Twist.h"
 #include "scout_service/RoverPosition.h"
 #include "scout_service/RoverList.h"
+#include "scout_service/RoverState.h"
 #include <move_base_msgs/MoveBaseActionResult.h>
 #include <math.h>
 
@@ -23,7 +25,9 @@ class Scout{
     ros::Subscriber subAMCLPose ;
     ros::Subscriber subScout ;
     ros::Subscriber subService ;
+    ros::Subscriber subAction ;
     ros::Publisher pubScoutPosition ;
+    ros::Publisher pubFullState ;
     ros::Publisher pubWaypoint ;
     
     scout_service::RoverPosition pos ;
@@ -45,12 +49,13 @@ class Scout{
     
     UINT CalculateSector(double, double) ;
     double CalculateDistance(double, double) ;
-    void SendNewWaypoint() ;
+    void SendFullState() ;
     
     void amclPoseCallback(const geometry_msgs::PoseWithCovarianceStamped&) ;
     void scoutCallback(const scout_service::RoverList&) ;
     void serviceCallback(const scout_service::RoverList&) ;
     void waypointCallback(const move_base_msgs::MoveBaseActionResult&) ;
+    void actionCallback(const std_msgs::Int8&) ;
 } ;
 
 Scout::Scout(ros::NodeHandle nh){
@@ -59,7 +64,9 @@ Scout::Scout(ros::NodeHandle nh){
   subAMCLPose = nh.subscribe("amcl_pose", 10, &Scout::amclPoseCallback, this) ;
   subScout = nh.subscribe("/scout_list", 10, &Scout::scoutCallback, this) ;
   subService = nh.subscribe("/service_list", 10, &Scout::serviceCallback, this) ;
+  subAction = nh.subscribe("action", 10, &Scout::actionCallback, this) ;
   pubScoutPosition = nh.advertise<scout_service::RoverPosition>("scout_position", 10) ;
+  pubFullState = nh.advertise<scout_service::RoverState>("full_state", 10) ;
   pubWaypoint = nh.advertise<geometry_msgs::Twist>("map_goal", 10) ;
   
   // Initialise from parameter list
@@ -128,7 +135,7 @@ void Scout::scoutCallback(const scout_service::RoverList& msg){
   }
   
   isScout = true ;
-  SendNewWaypoint() ;
+  SendFullState() ;
 }
 
 void Scout::serviceCallback(const scout_service::RoverList& msg){
@@ -150,15 +157,15 @@ void Scout::serviceCallback(const scout_service::RoverList& msg){
       service_states[i] /= worldSize ;
   }
   isService = true ;
-  SendNewWaypoint() ;
+  SendFullState() ;
 }
 
 void Scout::waypointCallback(const move_base_msgs::MoveBaseActionResult& msg){
   isResult = true ;
-  SendNewWaypoint() ;
+  SendFullState() ;
 }
 
-void Scout::SendNewWaypoint(){
+void Scout::SendFullState(){
   if (isScout && isService && isResult){
     // Concatenate control policy state
     full_state.clear() ;
@@ -171,22 +178,54 @@ void Scout::SendNewWaypoint(){
       full_state.push_back(service_states[2*i+1]) ;
     }
     
-    // compute new waypoint from control policy
-    geometry_msgs::Twist waypoint ;
-    // apply control policy here
-    waypoint.linear.x = 20.0 ;
-    waypoint.linear.y = 20.0 ;
-    waypoint.linear.z = 0.0 ;
-    waypoint.angular.x = 0.0 ;
-    waypoint.angular.y = 0.0 ;
-    waypoint.angular.z = 0.0 ;
+    scout_service::RoverState state ;
+    state.rover_name = rover_name ;
+    state.data = full_state ;
     
-    pubWaypoint.publish(waypoint) ;
-    
+    pubFullState.publish(state) ;
+
     isResult = false ;
     isScout = false ;
     isService = false ;
   }
+}
+
+void Scout::actionCallback(const std_msgs::Int8& msg){
+  // compute new waypoint from control policy
+  geometry_msgs::Twist waypoint ;
+  double x ;
+  double y ;
+  
+  if (msg.data == 0){
+    x = 0.0 ;
+    y = 0.0 ;
+  }
+  else if (msg.data == 1){
+    x = -2.0 ;
+    y = 0.0 ;
+  }
+  else if (msg.data == 2){
+    x = 0.0 ;
+    y = 2.0 ;
+  }
+  else if (msg.data == 3){
+    x = 2.0 ;
+    y = 0.0 ;
+  }
+  else if (msg.data == 4){
+    x = 0.0 ;
+    y = -2.0 ;
+  }
+  
+  // apply control policy here
+  waypoint.linear.x = round(pos.x) + x ;
+  waypoint.linear.y = round(pos.y) + y ;
+  waypoint.linear.z = 0.0 ;
+  waypoint.angular.x = 0.0 ;
+  waypoint.angular.y = 0.0 ;
+  waypoint.angular.z = 0.0 ;
+  
+  pubWaypoint.publish(waypoint) ;
 }
 
 UINT Scout::CalculateSector(double x, double y){

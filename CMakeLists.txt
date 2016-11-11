@@ -21,6 +21,7 @@ add_message_files(
   POIVector.msg
   RoverPosition.msg
   RoverList.msg
+  RoverState.msg
 )
 
 ## Generate added messages and services with any dependencies listed here
