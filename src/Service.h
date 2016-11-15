@@ -206,21 +206,21 @@ void Service::actionCallback(const std_msgs::Int8& msg){
     x = 0.0 ;
     y = 0.0 ;
   }
-  else if (msg.data == 1){
-    x = -1.0 ;
-    y = 0.0 ;
-  }
-  else if (msg.data == 2){
+  else if (msg.data == 1){ // right
     x = 0.0 ;
     y = 1.0 ;
   }
-  else if (msg.data == 3){
+  else if (msg.data == 2){ // down
     x = 1.0 ;
     y = 0.0 ;
   }
-  else if (msg.data == 4){
+  else if (msg.data == 3){ // left
     x = 0.0 ;
     y = -1.0 ;
+  }
+  else if (msg.data == 4){ // up
+    x = -1.0 ;
+    y = 0.0 ;
   }
   
   // apply control policy here
