@@ -5,6 +5,7 @@
 #include "std_msgs/Int8.h"
 #include "geometry_msgs/PoseWithCovarianceStamped.h"
 #include "geometry_msgs/Twist.h"
+#include "geometry_msgs/Point.h"
 #include "scout_service/RoverPosition.h"
 #include "scout_service/RoverList.h"
 #include "scout_service/RoverState.h"
@@ -33,6 +34,7 @@ class Service{
     ros::Publisher pubFullState ;
     ros::Publisher pubWaypoint ;
     ros::Publisher pubServicedPOIs ;
+    ros::Publisher pubAllPOIs ;
     
     scout_service::RoverPosition pos ;
     
@@ -77,6 +79,7 @@ Service::Service(ros::NodeHandle nh){
   pubFullState = nh.advertise<scout_service::RoverState>("full_state", 10) ;
   pubWaypoint = nh.advertise<geometry_msgs::Twist>("map_goal", 10) ;
   pubServicedPOIs = nh.advertise<scout_service::POIVector>("serviced_POIs", 10, true) ;
+  pubAllPOIs = nh.advertise<geometry_msgs::Point>("current_POIs", 10, true) ;
   
   // Initialise from parameter list
   ros::param::get("rover_name",rover_name) ;
@@ -301,6 +304,12 @@ void Service::CheckIfServiced(){
       sPOIs.num_pois++ ;
       sPOIs.x.push_back(poiX[i]) ;
       sPOIs.y.push_back(poiY[i]) ;
+      
+      geometry_msgs::Point p ;
+      p.x = poiX[i] ;
+      p.y = poiY[i] ;
+      p.z = 0.0 ;
+      pubAllPOIs.publish(p) ;
     }
   }
   if (poisServiced)

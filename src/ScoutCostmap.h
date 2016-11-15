@@ -1,6 +1,7 @@
 #include <ros/ros.h>
 #include <costmap_2d/costmap_2d_ros.h>
 #include <map_msgs/OccupancyGridUpdate.h>
+#include "geometry_msgs/Point.h"
 #include "scout_service/POIVector.h"
 #include <ros/console.h>
 #include <math.h>
@@ -19,6 +20,7 @@ class ScoutCostmap
   private:
     ros::Subscriber subCostmapUpdate ;
     ros::Publisher pubPOIList ;
+    ros::Publisher pubPOIAll ;
     
     costmap_2d::Costmap2DROS * costmap_ros_ ;
     UINT x_max ;
@@ -37,6 +39,7 @@ ScoutCostmap::ScoutCostmap(ros::NodeHandle nh, costmap_2d::Costmap2DROS *cm_ros_
   ROS_INFO("Initialising scout map object...") ;
   subCostmapUpdate = nh.subscribe("scout_map/scout_map/costmap_updates", 10, &ScoutCostmap::mapUpdateCallback, this) ;
   pubPOIList = nh.advertise<scout_service::POIVector>("discovered_POIs", 10, true) ;
+  pubPOIAll = nh.advertise<geometry_msgs::Point>("current_POIs", 10, true) ;
 
   costmap_2d::Costmap2D *costmap_ = costmap_ros_->getCostmap() ;
   x_max = costmap_->getSizeInCellsX() ;
@@ -68,8 +71,13 @@ void ScoutCostmap::mapUpdateCallback(const map_msgs::OccupancyGridUpdate&){
             break ;
           }
         }
-//        if (!isPOI)
-//          ROS_INFO_STREAM("(" << round(wx) << "," << round(wy) << ") is not a POI") ;
+        if (isPOI){
+          geometry_msgs::Point p ;
+          p.x = round(wx) ;
+          p.y = round(wy) ;
+          p.z = 0.0 ;
+          pubPOIAll.publish(p) ;
+        }
         if (isPOI && !POIMap.IsPOIDetected(wx,wy)){ // new POI detected
           POIMap.UpdateCell(wx,wy) ;
           POIList.num_pois++ ;
