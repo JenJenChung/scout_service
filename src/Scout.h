@@ -185,8 +185,8 @@ void Scout::SendFullState(){
     pubFullState.publish(state) ;
 
     isResult = false ;
-    isScout = false ;
-    isService = false ;
+//    isScout = false ; // only require first pose msg to be received
+//    isService = false ; // only require first pose msg to be received
   }
 }
 

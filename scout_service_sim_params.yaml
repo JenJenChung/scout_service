@@ -1,6 +1,6 @@
 total_scouts: 1
 total_services: 2
-world_size: 63
+world_size: 40
 total_POIs: 10
 poi_locations:
   x: [2,4,16,5,2,2,11,18,13,18]
